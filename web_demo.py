@@ -41,23 +41,25 @@ if __name__ == "__main__":
             previous_completion_tokens: str,
     ):
 
-            if input_mode == "audio":
-                if not audio_path:
-                    raise gr.Error("Audio input mode is selected, but no audio was recorded or uploaded. Please provide an audio input.")
-                with open(audio_path, "rb") as audio_file:
-                    audio_binary = audio_file.read()
-                audio_binary = base64.b64encode(audio_binary).decode("utf-8")
-                history.append({"role": "user", "content": {"path": audio_path}})
-                messages.append({"role": "user", "content": {"audio": audio_binary}})
-                user_input = "<audio>"
-            elif input_mode == "text":
-                if not input_text or not input_text.strip():
-                    raise gr.Error("Text input mode is selected, but no text was entered. Please provide a text input.")
-                history.append({"role": "user", "content": input_text})
-                messages.append({"role": "user", "content": input_text})
-                user_input = input_text
-            else:
-                raise gr.Error("Invalid input mode selected.")
+        # === START OF CORRECTED CODE BLOCK ===
+        if input_mode == "audio":
+            if not audio_path:
+                raise gr.Error("Audio input mode is selected, but no audio was recorded or uploaded. Please provide an audio input.")
+            with open(audio_path, "rb") as audio_file:
+                audio_binary = audio_file.read()
+            audio_binary = base64.b64encode(audio_binary).decode("utf-8")
+            history.append({"role": "user", "content": {"path": audio_path}})
+            messages.append({"role": "user", "content": {"audio": audio_binary}})
+            user_input = "<audio>"
+        elif input_mode == "text":
+            if not input_text or not input_text.strip():
+                raise gr.Error("Text input mode is selected, but no text was entered. Please provide a text input.")
+            history.append({"role": "user", "content": input_text})
+            messages.append({"role": "user", "content": input_text})
+            user_input = input_text
+        else:
+            raise gr.Error("Invalid input mode selected.")
+        # === END OF CORRECTED CODE BLOCK ===
 
         # Gather history
         inputs = previous_input_tokens + previous_completion_tokens
@@ -106,11 +108,12 @@ if __name__ == "__main__":
                         yield history, messages, inputs, error_output, error_output, None, None, deepcopy(history)
                         return
 
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                wav_full = torch.cat(tts_speechs, dim=1)
-                torchaudio.save(f, wav_full, 22050, format="wav")
-                history.append({"role": "assistant", "content": {"path": f.name, "type": "audio/wav"}})
-                yield history, messages, inputs, complete_text, '', None, f.name, deepcopy(history)
+            if tts_speechs:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                    wav_full = torch.cat(tts_speechs, dim=1)
+                    torchaudio.save(f, wav_full, 22050, format="wav")
+                    history.append({"role": "assistant", "content": {"path": f.name, "type": "audio/wav"}})
+                    yield history, messages, inputs, complete_text, '', None, f.name, deepcopy(history)
 
     def update_input_interface(input_mode):
         if input_mode == "audio":
