@@ -21,7 +21,7 @@ natten==0.17.5
 numpy==2.3.1
 omegaconf==2.3.0
 onnxruntime==1.22.0
-packaging==25.0
+packaging==24.1
 peft==0.5.0
 phonemizer==3.3.0
 piper_phonemize==1.1.0
