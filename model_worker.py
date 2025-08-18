@@ -38,6 +38,7 @@ from src.constants import DEFAULT_AUDIO_TOKEN, AUDIO_TOKEN_INDEX
 from src.modeling_omnispeech import OmniSpeechModel
 from src.utils import get_waveform
 from src.feature_extraction_audio import WhisperFeatureExtractor
+from speaker_encoder import SpeakerEncoder
 
 sys.path.append("cosyvoice")
 sys.path.append("third_party/Matcha-TTS")
@@ -130,10 +131,11 @@ class ModelWorker:
         self.worker_addr = worker_addr
         self.worker_id = worker_id
         self.model_name = model_name
-        self.tokenizer, self.tts_tokenizer, self.model, self.generation_config,\
+        self.tokenizer, self.tts_tokenizer, self.model, self.generation_config,
             self.tts_generation_config = load_pretrained_model(model_path)
         self.audio_extractor = WhisperFeatureExtractor.from_pretrained(os.path.join(model_path, "audio"))
         self.audio_decoder = load_flow_model(flow_path)
+        self.speaker_encoder = SpeakerEncoder() # Load the speaker encoder model
         self.system_prompt = "You are a helpful assistant."
         self.units_bias = self.tts_tokenizer.encode("<|audio_0|>")[0]
 
@@ -260,6 +262,19 @@ class ModelWorker:
         tts_generation_config = deepcopy(self.tts_generation_config)
 
         messages = params["messages"]
+        
+        # Handle voice cloning
+        spk_emb = None
+        if params.get("voice_clone_audio"):
+            audio_binary = base64.b64decode(params["voice_clone_audio"])
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                temp_file.write(audio_binary)
+                temp_file_path = temp_file.name
+            
+            logger.info(f"Generating speaker embedding for clone audio: {temp_file_path}")
+            spk_emb = self.speaker_encoder.get_embedding(temp_file_path).to(dtype=torch.bfloat16)
+            os.remove(temp_file_path) # Clean up the temporary file
+
         input_ids, speech_values, speech_mask = self.get_input_params(messages)
         input_ids = input_ids.to(device='cuda', non_blocking=True)
         if speech_values is not None:
@@ -295,7 +310,7 @@ class ModelWorker:
             attention_mask=None,
             speech_values=speech_values,
             speech_mask=speech_mask,
-            spk_emb=None,
+            spk_emb=spk_emb, # Pass the generated embedding here
             units_gen=True,
             streamer=streamer,
             units_streamer=units_streamer,

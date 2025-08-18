@@ -34,6 +34,7 @@ if __name__ == "__main__":
             max_new_tokens: int,
             input_mode,
             audio_path: str | None,
+            clone_audio_path: str | None, # Added for voice cloning
             input_text: str | None,
             history: list[dict],
             messages: list[dict],
@@ -41,7 +42,7 @@ if __name__ == "__main__":
             previous_completion_tokens: str,
     ):
 
-        # === START OF CORRECTED CODE BLOCK ===
+        # === Prepare the main input (text or audio) ===
         if input_mode == "audio":
             if not audio_path:
                 raise gr.Error("Audio input mode is selected, but no audio was recorded or uploaded. Please provide an audio input.")
@@ -59,24 +60,37 @@ if __name__ == "__main__":
             user_input = input_text
         else:
             raise gr.Error("Invalid input mode selected.")
-        # === END OF CORRECTED CODE BLOCK ===
+
+        # === Prepare the voice cloning audio ===
+        clone_audio_b64 = None
+        if clone_audio_path:
+            with open(clone_audio_path, "rb") as audio_file:
+                clone_audio_b64 = base64.b64encode(audio_file.read()).decode("utf-8")
 
         # Gather history
         inputs = previous_input_tokens + previous_completion_tokens
         inputs = inputs.strip()
-        inputs += f"<|user|>\n{user_input}\n<|assistant|>\n"
+        inputs += f"<|user|>
+{user_input}
+<|assistant|>
+"
 
+        # === Call the backend ===
         with torch.no_grad():
+            payload = {
+                "model": "omnispeech",
+                "messages": messages,
+                "temperature": temperature,
+                "top_p": top_p,
+                "max_new_tokens": max_new_tokens
+            }
+            if clone_audio_b64:
+                payload["voice_clone_audio"] = clone_audio_b64
+
             response = requests.post(
                 "http://localhost:21002/worker_generate_stream",
                 headers = {"User-Agent": "Omni Speech"},
-                json={
-                    "model": "omnispeech",
-                    "messages": messages,
-                    "temperature": temperature,
-                    "top_p": top_p,
-                    "max_new_tokens": max_new_tokens
-                },
+                json=payload,
                 stream=True,
                 timeout=20
             )
@@ -154,14 +168,19 @@ if __name__ == "__main__":
                 text_input = gr.Textbox(label="Input text", placeholder="Enter your text here...", lines=2, visible=False)
 
             with gr.Column():
+                clone_audio = gr.Audio(label="Reference Audio for Voice Cloning", type='filepath', show_download_button=True)
                 submit_btn = gr.Button("Submit")
                 reset_btn = gr.Button("Clear")
+
+        with gr.Row():
+            with gr.Column():
                 if streaming_output:
                     output_audio = gr.Audio(label="Play", streaming=True,
                         autoplay=True, show_download_button=False)
                 else:
                     output_audio = gr.Audio(label="Play", streaming=False,
                         autoplay=False, show_download_button=False)
+            with gr.Column():
                 complete_audio = gr.Audio(label="Last Output Audio (If Any)",
                     type="filepath", interactive=False, autoplay=False)
 
@@ -195,6 +214,7 @@ if __name__ == "__main__":
                 max_new_token,
                 input_mode,
                 audio,
+                clone_audio,
                 text_input,
                 history_state,
                 messages,
