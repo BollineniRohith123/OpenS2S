@@ -65,15 +65,14 @@ wait_for_service() {
 
 echo "### Step 1: Installing System Dependencies ###"
 echo "(Running as root, sudo not required)"
-apt-get update -y
-apt-get install -y libsox-dev sox ffmpeg netcat # netcat is used for health checks
+apt-get update && apt-get install -y libsox-dev sox ffmpeg cmake netcat
 
 echo "
 ### Step 2: Installing Python Dependencies ###"
-# Ensure hydra-core is in requirements, if not, add it.
-grep -qxF "hydra-core" requirements.txt || echo "hydra-core" >> requirements.txt
-
 pip install --upgrade pip
+pip install packaging ninja wheel
+pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --extra-index-url https://download.pytorch.org/whl/cu121
+pip install flash-attn==2.7.0.post2 --no-build-isolation
 pip install -r requirements.txt
 pip install -U huggingface_hub
 
@@ -114,9 +113,12 @@ echo ""
 echo "==============================================================================="
 echo "  Application is now running!"
 echo ""
-echo "  Access the web interface at: http://127.0.0.1:$WEB_SERVER_PORT"
+echo "  Access the web interface at: http://1227.0.0.1:$WEB_SERVER_PORT"
 echo "  (If on RunPod, use the public URL provided by the service)"
 echo "==============================================================================="
 echo ""
 echo "Press Ctrl+C to stop all services."
 python3 web_demo.py --port $WEB_SERVER_PORT --host 0.0.0.0 --share
+
+# The script will wait here until the web_demo.py process is terminated.
+# The 'trap' command will then execute the cleanup function.
